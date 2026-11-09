@@ -1,0 +1,36 @@
+{
+  "name": "universal-workspace-mcp",
+  "version": "0.1.0",
+  "description": "Universal Remote Coding Workspace MCP — persistent, multi-agent, remote coding workspace exposed over MCP Streamable HTTP",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/database/schema.sql','dist/database/schema.sql')\"",
+    "start": "node --env-file=.env dist/index.js",
+    "setup": "tsx src/cli.ts setup",
+    "mint-token": "tsx src/cli.ts mint-token",
+    "list-tokens": "tsx src/cli.ts list-tokens",
+    "revoke-token": "tsx src/cli.ts revoke-token",
+    "list-workspaces": "tsx src/cli.ts list-workspaces",
+    "status": "tsx src/cli.ts status",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "pino": "^9.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
