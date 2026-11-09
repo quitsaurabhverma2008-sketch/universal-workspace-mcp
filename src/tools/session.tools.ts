@@ -21,7 +21,7 @@ export function registerSessionTools(server: McpServer, services: ToolServices, 
     "agent_register",
     {
       description:
-        "Register (or re-register) this agent identity — e.g. 'opencode-phone'. Idempotent per (user, name). Registration also happens implicitly via your token; call this to set a friendly name and kind.",
+        "Register (or re-register) this agent identity — e.g. 'opencode-phone'. Idempotent per (user, name). Does not require an open workspace; when called before workspace_open the audit event is recorded without a workspace.",
       inputSchema: {
         workspace: slug,
         name: z.string().min(1).max(80),
@@ -29,12 +29,18 @@ export function registerSessionTools(server: McpServer, services: ToolServices, 
       },
     },
     async (args) => {
-      const { workspace } = requireWorkspace(services, ctx, args.workspace, ["sessions:write"]);
-      // Re-point this session's audit identity at the registered agent
+      // Identity registration is session-level: allowed with or without a workspace context.
+      let workspaceId: string | null = null;
+      if (args.workspace) {
+        const resolved = requireWorkspace(services, ctx, args.workspace, ["sessions:write"]);
+        workspaceId = resolved.workspace.id;
+      } else if (ctx.boundWorkspaceId) {
+        workspaceId = ctx.boundWorkspaceId;
+      }
       const agent = upsertAgent(services.db, ctx.principal.userId, { name: args.name, kind: args.kind });
       ctx.principal.agentId = agent.id;
       services.db.prepare(`UPDATE sessions SET agent_id = ? WHERE id = ?`).run(agent.id, ctx.sessionRowId);
-      writeEvent(services.db, { workspaceId: workspace.id, agentId: agent.id, sessionId: ctx.sessionRowId, action: "agent.registered", target: args.name });
+      writeEvent(services.db, { workspaceId, agentId: agent.id, sessionId: ctx.sessionRowId, action: "agent.registered", target: args.name });
       return { agent_id: agent.id, created: agent.created, name: args.name };
     }
   );
