@@ -34,9 +34,24 @@ export interface TaskRow {
   priority: number;
   position: number;
   assignee_agent: string | null;
+  assignee_name?: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+}
+
+/**
+ * Tool boundary convenience: assignee may be supplied as an agent id OR an
+ * agent name (names suffice for humans and agents). Resolves to the internal id.
+ * Unknown names are rejected — never silently drop the assignment.
+ */
+export function resolveAgentId(db: Db, nameOrId: string | null | undefined): string | null | undefined {
+  if (nameOrId === undefined || nameOrId === null) return nameOrId;
+  const byId = db.prepare(`SELECT id FROM agents WHERE id = ?`).get(nameOrId) as { id: string } | undefined;
+  if (byId) return byId.id;
+  const byName = db.prepare(`SELECT id FROM agents WHERE name = ? ORDER BY created_at ASC LIMIT 1`).get(nameOrId) as { id: string } | undefined;
+  if (!byName) throw Err.validation(`unknown assignee_agent: "${nameOrId}" (pass an agent name or id; register with agent_register first)`);
+  return byName.id;
 }
 
 export function createPlan(
@@ -137,7 +152,7 @@ export function createTask(
     args.description ?? null,
     Math.min(Math.max(args.priority ?? 3, 1), 5),
     position,
-    args.assigneeAgent ?? null
+    resolveAgentId(db, args.assigneeAgent) ?? null
   );
   db.prepare(`UPDATE plans SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(plan.id);
   void agentId;
@@ -145,7 +160,14 @@ export function createTask(
 }
 
 export function getTask(db: Db, workspaceId: string, taskId: string): TaskRow | null {
-  return (db.prepare(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId, taskId) as TaskRow | undefined) ?? null;
+  return (
+    (db
+      .prepare(
+        `SELECT t.*, a.name AS assignee_name FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent
+         WHERE t.workspace_id = ? AND t.id = ?`
+      )
+      .get(workspaceId, taskId) as TaskRow | undefined) ?? null
+  );
 }
 
 export function updateTask(
@@ -171,6 +193,8 @@ export function updateTask(
   }
   const nextStatus = args.status ?? existing.status;
   const completedAt = nextStatus === "done" ? existing.completed_at ?? new Date().toISOString() : nextStatus === "pending" || nextStatus === "in_progress" ? null : existing.completed_at;
+  const resolvedAssignee =
+    (args.assigneeAgent === undefined ? existing.assignee_agent : resolveAgentId(db, args.assigneeAgent)) ?? null;
   db.prepare(
     `UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, assignee_agent = ?, position = ?,
        completed_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
@@ -180,7 +204,7 @@ export function updateTask(
     args.description ?? existing.description,
     nextStatus,
     Math.min(Math.max(args.priority ?? existing.priority, 1), 5),
-    args.assigneeAgent === undefined ? existing.assignee_agent : args.assigneeAgent,
+    resolvedAssignee,
     args.position ?? existing.position,
     completedAt,
     taskId
@@ -217,7 +241,7 @@ export function listTasks(
   } = {}
 ): TaskRow[] {
   const params: unknown[] = [workspaceId];
-  let sql = `SELECT * FROM tasks WHERE workspace_id = ?`;
+  let sql = `SELECT t.*, a.name AS assignee_name FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent WHERE t.workspace_id = ?`;
   if (opts.planId) {
     sql += ` AND plan_id = ?`;
     params.push(opts.planId);

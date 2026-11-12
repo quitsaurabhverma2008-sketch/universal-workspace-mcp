@@ -216,3 +216,32 @@ npm run status         # db/user/workspace/session counters
 Design doc: `docs/ARCHITECTURE.md` — directory layout, ADRs, full DDL, tool schemas, threat model, Phase 8+ (Option 3 teams, proot sandbox, OAuth, VPS profile).
 
 Single-instance host by design (SQLite + in-memory process registry). Do not run two servers against the same `data/`.
+
+## 8. Demo: three MCP agents built AURORA in ~11 seconds
+
+Three independent agent sessions (`agent-alpha`, `agent-beta`, `agent-gamma`), each with its own token, connected to this MCP and collaborated on one project in a shared workspace (`aurora-showcase`). No human wrote a line of the page.
+
+**Deliverable** (`examples/aurora-showcase/`): AURORA — Aarav Rao's personal landing page. Static, zero dependencies: `index.html`, `styles.css`, `app.js`, `README.md`.
+
+**How the agents split the work** (claimed at runtime via compare-and-set + locks — nobody was assigned a track):
+- P1 `index.html` → **agent-alpha**
+- P2 `styles.css` → **agent-gamma**
+- P3 `app.js` → **agent-beta**
+- P4 `README.md` + cross-file integration check → **agent-gamma**
+
+**Metrics (MCP audit events in workspace `aurora-showcase`)**
+- Workspace seeded → all agents done with handovers: **≈44 s** end-to-end
+- Three agents working concurrently: **≈11 s**
+- **45 audited events** — claims, locks, writes, commands, handovers
+- 4/4 tasks done · 3 file authors · 1 integration sweep · 0 human keystrokes
+
+**Git history inside the workspace**
+```
+117cd5b agent-alpha  index.html by agent-alpha
+f08a95d agent-beta   app.js by agent-beta
+29ee377 agent-gamma  README.md by agent-gamma
+3730150 agent-gamma  integration: sweep remaining agent artifacts
+```
+
+Everything was coordinated through MCP tools: `task_update` with `expected_updated_at` compare-and-set claims, `lock_acquire/release`, `expected_hash` on writes, `terminal_execute` for git, `memory_add` handovers. Git authors prove per-agent authorship. Recreate with `npx tsx scripts/seed-aurora.ts` + `scripts/trio-agent.ts`.
+
