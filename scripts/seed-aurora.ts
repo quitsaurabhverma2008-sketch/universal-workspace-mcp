@@ -1,11 +1,15 @@
 /**
- * Seed the 'aurora-home' workspace: mission + plan + 4 claimable tasks (P1..P4).
- * Timestamps every step; prints SEED_START for the timing harness.
+ * Seed a workspace: mission + plan + 4 claimable tasks (P1..P4).
+ * Usable as a module (live-demo.ts) or directly:
+ *   npx tsx scripts/seed-aurora.ts
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-const TOKEN = process.env.UMCP_TOKEN;
+export const DEMO_SLUG = process.env.DEMO_SLUG ?? "aurora-showcase";
+
+export async function seedWorkspace(slug: string = DEMO_SLUG, tokenOverride?: string): Promise<string> {
+const TOKEN = tokenOverride ?? process.env.UMCP_TOKEN;
 if (!TOKEN) throw new Error("set UMCP_TOKEN (admin)");
 console.log("SEED_START", Date.now());
 
@@ -22,12 +26,13 @@ const call = async (name: string, args: Record<string, unknown> = {}) => {
 
 const createRes = await call("workspace_create", {
   name: "Aurora — Personal Landing Page",
-  slug: "aurora-showcase",
+  slug,
   description: "Fictional developer's personal landing page — built by 3 MCP agents in one shared workspace",
   git_enabled: true,
 });
 console.log("workspace_create:", createRes.isErr ? JSON.stringify(createRes.data).slice(0, 200) : `ok ${createRes.data.slug}`);
-await call("workspace_open", { slug: "aurora-showcase" });
+const actualSlug = createRes.isErr ? slug : (createRes.data.slug as string);
+await call("workspace_open", { slug: actualSlug });
 
 await call("brain_update", {
   section: "Mission",
@@ -65,4 +70,11 @@ for (const t of tasks) {
 }
 console.log("SEED_END", Date.now());
 await client.close();
-process.exit(0);
+return actualSlug;
+}
+
+// CLI entry — only when run directly
+if (process.argv[1] && process.argv[1].endsWith("seed-aurora.ts")) {
+  await seedWorkspace(process.env.DEMO_SLUG ?? DEMO_SLUG);
+  process.exit(0);
+}

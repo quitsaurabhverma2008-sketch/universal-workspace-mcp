@@ -319,6 +319,15 @@ Routes:
 
 The UI reads the same SQLite state the MCP tools write — there is no second source of truth, so what you watch *is* what the agents did. "Agent intent" is derived from the tool calls an agent made (claims, writes, commits, handovers) — it is activity, not model internals.
 
+### Run a live swarm and watch it happen
+
+```bash
+npm run demo:live                    # seeds workspace 'live-demo' + runs the 3-agent swarm
+DEMO_SLUG=aurora-2 npm run demo:live # custom workspace
+```
+
+Then open the UI on that workspace slug — or the terminal TUI (`npx tsx scripts/tui.ts <slug>`) — and you see the orbs claim tasks, write files, commit and hand over in real time.
+
 ```bash
 # regenerate the preview GIF from the live audit trail
 npx tsx tools/render-3d-gif.ts examples/tui-demo/squad-3d.gif aurora-showcase

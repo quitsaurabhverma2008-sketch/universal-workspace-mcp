@@ -29,7 +29,7 @@ const call = async (name: string, args: Record<string, unknown> = {}) => {
 
 // ── Register + open ──────────────────────────────────────────────────
 log("register:", (await call("agent_register", { name: AGENT, kind: "agent" })).data);
-const opened = await call("workspace_open", { slug: "aurora-showcase" });
+const opened = await call("workspace_open", { slug: process.env.DEMO_SLUG ?? "aurora-showcase" });
 log("workspace_open:", opened.isErr ? "ERR" : "ok");
 
 // ── File contents (alpha/beta/gamma tracks) ──────────────────────────
@@ -367,6 +367,15 @@ for (let round = 0; round < 4; round++) {
   await call("lock_release", { path: content?.path ?? "README.md" });
   const done = await call("task_complete", { task_id: target.id, note: `completed by ${AGENT}` });
   log("task_complete:", (done.data as { task?: { status: string } }).task?.status);
+
+  // The integration task also sweeps whatever the other agents left uncommitted
+  if (target.priority === 4) {
+    const sweep = await call("terminal_execute", {
+      command: `git add -A && git -c user.name=${AGENT} -c user.email=${AGENT}@mcp commit --quiet -m "integration: sweep remaining agent artifacts" || true; git log --oneline | head -6`,
+      wait: true,
+    });
+    log("integration sweep done; history:", (sweep.data as { stdoutTail?: string }).stdoutTail?.trim().split("\n").length, "commits");
+  }
 
   await call("brain_update", { section: "Current State", content: `${AGENT} completed P${target.priority}: ${target.title.split("—")[0]?.trim()}`, mode: "append" });
 }
