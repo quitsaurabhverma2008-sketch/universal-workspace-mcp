@@ -6,6 +6,13 @@ A remote, persistent, multi-agent **coding workspace** exposed through the stand
 - **Multi-project, shared access (Option 2)** with an Option 3-ready schema (teams/private workspaces) — see `docs/ARCHITECTURE.md`.
 - **Restricted remote execution** — safety denylist, workspace-jailed cwd, timeouts, concurrency caps. No unrestricted shell is exposed.
 - **47 MCP tools + 6 resources + 5 prompts**, all behind per-workspace roles and bearer tokens.
+- **Runs on a phone** — this whole thing was built and is running on an Android/Termux host.
+
+### Watch it happen — 3 agents, 1 workspace, ~11 seconds
+
+![build replay](examples/tui-demo/build-replay.gif)
+
+Live audit feed of a real build: who claimed which task, who wrote which file, when.
 
 ---
 
@@ -244,4 +251,40 @@ f08a95d agent-beta   app.js by agent-beta
 ```
 
 Everything was coordinated through MCP tools: `task_update` with `expected_updated_at` compare-and-set claims, `lock_acquire/release`, `expected_hash` on writes, `terminal_execute` for git, `memory_add` handovers. Git authors prove per-agent authorship. Recreate with `npx tsx scripts/seed-aurora.ts` + `scripts/trio-agent.ts`.
+
+### The deliverable
+
+![aurora page](examples/aurora-showcase/aurora-page.gif)
+
+`examples/aurora-showcase/` — AURORA, a static personal landing page (index.html, styles.css, app.js, README.md). Zero dependencies, opens straight in a browser. The GIF above is a pixel-rendered recreation produced by `tools/render-aurora-gif.ts` (pure-JS canvas + 5×7 bitmap font + `gifenc` — no browser, no native deps).
+
+### Who took what — the claim race
+
+![agent race](examples/tui-demo/agent-race.gif)
+
+Three agents raced for the same task board. The winner was decided by `task_update`'s compare-and-set on `expected_updated_at` — losers got `CONFLICT` and moved to the next task. Nobody was assigned a track.
+
+## 9. Live monitor (TUI)
+
+`scripts/tui.ts` is a real-time terminal dashboard over the MCP audit trail — task board with assignees, connected agents, and a live "who wrote what, when" feed straight from the `events` table.
+
+```bash
+npx tsx scripts/tui.ts                  # watch the default workspace
+npx tsx scripts/tui.ts aurora-showcase  # watch a specific workspace
+SMOKE=1 npx tsx scripts/tui.ts          # print one frame and exit
+```
+
+Keys: `q` quit · `r` refresh · `p` pause. It reads the SQLite database read-only, so it needs no MCP session — and it updates live while agents work.
+
+![tui live](examples/tui-demo/tui-live.gif)
+
+GIFs are regenerated from the real audit trail:
+
+```bash
+npx tsx tools/render-aurora-gif.ts examples/aurora-showcase/aurora-page.gif
+npx tsx tools/render-tui-gif.ts aurora-showcase examples/tui-demo
+```
+
+`tools/gifkit.ts` is a dependency-free pixel canvas (RGBA buffer, rounded rects, radial glow, 5×7 bitmap font) with a `gifenc` wrapper — the whole rendering pipeline runs on a phone.
+
 
