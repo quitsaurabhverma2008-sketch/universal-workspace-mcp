@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/database/schema.sql','dist/database/schema.sql')\"",
+    "build": "tsc -p tsconfig.json && node -e \"const fs=require('node:fs');fs.copyFileSync('src/database/schema.sql','dist/database/schema.sql');fs.mkdirSync('dist/ui',{recursive:true});for(const f of ['index.html','app.js','style.css'])fs.copyFileSync('src/ui/'+f,'dist/ui/'+f);\"",
     "start": "node --env-file=.env dist/index.js",
     "setup": "tsx src/cli.ts setup",
     "mint-token": "tsx src/cli.ts mint-token",
@@ -25,6 +25,7 @@
     "@modelcontextprotocol/sdk": "^1.17.0",
     "gifenc": "^1.0.3",
     "pino": "^9.0.0",
+    "three": "^0.187.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

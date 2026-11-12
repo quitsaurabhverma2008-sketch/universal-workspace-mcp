@@ -287,4 +287,42 @@ npx tsx tools/render-tui-gif.ts aurora-showcase examples/tui-demo
 
 `tools/gifkit.ts` is a dependency-free pixel canvas (RGBA buffer, rounded rects, radial glow, 5×7 bitmap font) with a `gifenc` wrapper — the whole rendering pipeline runs on a phone.
 
+## 10. Web UI — live 3D squad view
+
+The MCP server also ships a browser UI at **`/ui`** (same origin as the MCP endpoint, same bearer-token auth):
+
+```
+https://mcp.<your-domain>/ui?token=<umcp_...>&workspace=<slug>
+```
+
+Open it and you get a live **3D scene** of the shared workspace:
+
+![3D squad](examples/tui-demo/squad-3d.gif)
+
+*(pixel-rendered preview of the WebGL scene — the browser version is real three.js)*
+
+- **The core** (glowing purple ring) = the shared project state every agent works against
+- **One orb per agent**, coloured, drifting toward the task it owns, labelled with its live intent
+- **Task cards** floating in a ring — green when done, agent-coloured when claimed
+- **Energy trails** fire from an agent to the core every time it writes a file, claims a task, runs a command or completes work
+- **Side panel**: live task board (who owns what), agent cards (files written, tasks claimed/done, current intent), and the audit feed — *time · agent · action · target* — straight from the `events` table
+- Camera slowly orbits; everything updates within a second of an agent acting
+
+Routes:
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /ui` | – | the dashboard shell |
+| `GET /ui/app.js`, `/ui/style.css`, `/ui/three.module.js` | – | client assets (three.js is vendored from `node_modules`) |
+| `GET /ui/api/state?workspace=<slug>` | Bearer | live state (tasks, agents, events, stats) |
+| `GET /ui/api/workspaces` | Bearer | workspaces the caller may view |
+
+The UI reads the same SQLite state the MCP tools write — there is no second source of truth, so what you watch *is* what the agents did. "Agent intent" is derived from the tool calls an agent made (claims, writes, commits, handovers) — it is activity, not model internals.
+
+```bash
+# regenerate the preview GIF from the live audit trail
+npx tsx tools/render-3d-gif.ts examples/tui-demo/squad-3d.gif aurora-showcase
+```
+
+
 

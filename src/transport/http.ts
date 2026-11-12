@@ -1,5 +1,9 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { AppConfig } from "../config/env.js";
 import type { Db } from "../database/db.js";
@@ -9,6 +13,7 @@ import { verifyBearer } from "../security/authenticate.js";
 import { buildMcpServer, SERVER_VERSION, SERVER_NAME } from "../server.js";
 import { RateLimiter } from "./ratelimit.js";
 import { logger } from "../utils/logger.js";
+import { buildUiState, listUiWorkspaces, uiDb } from "../ui/state.js";
 
 export interface HttpServices {
   db: Db;
@@ -25,6 +30,46 @@ export interface HttpApp {
   server: http.Server;
   /** Best-effort graceful shutdown: close transports, then the HTTP listener. */
   close: () => Promise<void>;
+}
+
+/* ── static UI assets ──────────────────────────────────────────────── */
+
+const UI_DIR_CANDIDATES = [
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "ui"), // dist/transport → dist/ui
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "ui"), // running from src/
+];
+const THREE_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "node_modules",
+  "three",
+  "build",
+  "three.module.js"
+);
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+};
+
+function uiAssetPath(file: string): string | null {
+  for (const dir of UI_DIR_CANDIDATES) {
+    const p = path.join(dir, file);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+async function serveFile(res: ServerResponse, filePath: string, contentType: string): Promise<void> {
+  const data = await fsp.readFile(filePath);
+  res.writeHead(200, {
+    "content-type": contentType,
+    "cache-control": "no-cache",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(data);
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown, headers: Record<string, string> = {}): void {
@@ -110,9 +155,72 @@ export function createHttpApp(services: HttpServices): HttpApp {
           return sendJson(res, 200, { status: "ok", name: SERVER_NAME, version: SERVER_VERSION, uptime_s: Math.floor((Date.now() - startedAt) / 1000) });
         }
 
+        // ── Web UI (3D live squad view) ────────────────────────────
+        if (pathname === "/ui" || pathname.startsWith("/ui/")) {
+          // static shell (no secrets inside)
+          if (req.method === "GET" && (pathname === "/ui" || pathname === "/ui/")) {
+            const idx = uiAssetPath("index.html");
+            if (!idx) return sendJson(res, 500, { error: { code: "INTERNAL", message: "ui assets missing" } });
+            return serveFile(res, idx, MIME[".html"]!);
+          }
+          if (req.method === "GET" && pathname === "/ui/app.js") {
+            const p = uiAssetPath("app.js");
+            if (!p) return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "app.js missing" } });
+            return serveFile(res, p, MIME[".js"]!);
+          }
+          if (req.method === "GET" && pathname === "/ui/style.css") {
+            const p = uiAssetPath("style.css");
+            if (!p) return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "style.css missing" } });
+            return serveFile(res, p, MIME[".css"]!);
+          }
+          if (req.method === "GET" && pathname === "/ui/three.module.js") {
+            if (!fs.existsSync(THREE_PATH)) {
+              return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "three.js not installed" } });
+            }
+            return serveFile(res, THREE_PATH, MIME[".js"]!);
+          }
+
+          // API — requires the same bearer token as MCP
+          if (pathname.startsWith("/ui/api/")) {
+            const authHeader = req.headers.authorization ?? "";
+            const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+            let principal: Principal;
+            try {
+              principal = verifyBearer(db, config.tokenPepper, bearer);
+            } catch {
+              return sendJson(res, 401, { error: { code: "UNAUTHORIZED", message: "missing or invalid bearer token" } });
+            }
+            if (!rateLimiter.allow(principal.tokenId)) {
+              return sendJson(res, 429, { error: { code: "RATE_LIMITED", message: "rate limit exceeded" } });
+            }
+            try {
+              if (pathname === "/ui/api/state") {
+                const slug = url.searchParams.get("workspace") ?? "";
+                const state = buildUiState(uiDb, principal, slug, {
+                  name: SERVER_NAME,
+                  version: SERVER_VERSION,
+                  started_at: new Date(startedAt).toISOString(),
+                  uptime_s: Math.floor((Date.now() - startedAt) / 1000),
+                });
+                return sendJson(res, 200, state);
+              }
+              if (pathname === "/ui/api/workspaces") {
+                return sendJson(res, 200, { workspaces: listUiWorkspaces(uiDb, principal) });
+              }
+            } catch (error) {
+              return sendJson(res, 404, {
+                error: { code: "NOT_FOUND", message: error instanceof Error ? error.message : "not found" },
+              });
+            }
+            return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "unknown ui endpoint" } });
+          }
+
+          return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "unknown ui path" } });
+        }
+
         // ── Everything else requires the /mcp path ───────────────────
         if (pathname !== "/mcp") {
-          return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "routes: GET /health, ALL /mcp" } });
+          return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "routes: GET /health, ALL /mcp, GET /ui" } });
         }
         if (!["POST", "GET", "DELETE"].includes(req.method ?? "")) {
           return sendJson(res, 405, { error: { code: "METHOD_NOT_ALLOWED", message: "POST, GET, DELETE only" } }, { allow: "POST, GET, DELETE" });

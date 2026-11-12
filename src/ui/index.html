@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Universal Workspace MCP — Live 3D Squad</title>
+<link rel="stylesheet" href="/ui/style.css" />
+<script type="importmap">{ "imports": { "three": "/ui/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="gate" class="gate">
+  <div class="gate-card">
+    <h1>Universal Workspace MCP</h1>
+    <p class="sub">Live 3D squad view — agents, tasks and every action, in real time.</p>
+    <label>API token<input id="token" type="password" placeholder="umcp_..." autocomplete="off" /></label>
+    <label>Workspace<input id="workspace" type="text" placeholder="aurora-showcase" /></label>
+    <button id="connect">Connect</button>
+    <p id="gate-msg" class="msg"></p>
+  </div>
+</div>
+
+<header class="hud top">
+  <div class="brand">UNIV<span>-MCP</span> <em id="wsname">—</em></div>
+  <div class="stats" id="stats"></div>
+  <div class="conn"><i id="dot"></i><span id="conntxt">connecting…</span></div>
+</header>
+
+<section class="hud panel agents" id="agents-panel">
+  <h2>AGENTS <small id="agents-count"></small></h2>
+  <div id="agents"></div>
+</section>
+
+<section class="hud panel tasks" id="tasks-panel">
+  <h2>TASK BOARD <small id="tasks-count"></small></h2>
+  <div id="tasks"></div>
+</section>
+
+<section class="hud panel feed" id="feed-panel">
+  <h2>LIVE ACTIVITY <small>who · what · when</small></h2>
+  <div id="feed"></div>
+</section>
+
+<footer class="hud bottom">
+  <span id="serverline">universal-workspace-mcp</span>
+  <span class="spacer"></span>
+  <span>streamed over MCP Streamable HTTP</span>
+</footer>
+
+<script type="module" src="/ui/app.js"></script>
+</body>
+</html>

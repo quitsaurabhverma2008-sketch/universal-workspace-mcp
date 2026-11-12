@@ -38,6 +38,9 @@ export class Canvas {
   }
 
   setPx(x: number, y: number, c: RGBA): void {
+    // Round first: fractional indices on a TypedArray are silently dropped.
+    x = Math.round(x);
+    y = Math.round(y);
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
     const i = (y * this.width + x) * 4;
     const a = c[3] / 255;
@@ -94,7 +97,24 @@ export class Canvas {
   }
 
   drawHLine(x0: number, x1: number, y: number, c: RGBA): void {
+    if (x1 < x0) { const t = x0; x0 = x1; x1 = t; }
     for (let x = x0; x <= x1; x++) this.setPx(x, y, c);
+  }
+
+  /** Bresenham line between any two points. */
+  drawLine(x0: number, y0: number, x1: number, y1: number, c: RGBA): void {
+    let x = Math.round(x0), y = Math.round(y0);
+    const xe = Math.round(x1), ye = Math.round(y1);
+    const dx = Math.abs(xe - x), dy = -Math.abs(ye - y);
+    const sx = x < xe ? 1 : -1, sy = y < ye ? 1 : -1;
+    let err = dx + dy;
+    for (let guard = 0; guard < 4000; guard++) {
+      this.setPx(x, y, c);
+      if (x === xe && y === ye) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x += sx; }
+      if (e2 <= dx) { err += dx; y += sy; }
+    }
   }
 
   strokeRoundRect(x: number, y: number, w: number, h: number, r: number, c: RGBA, thickness = 1): void {
