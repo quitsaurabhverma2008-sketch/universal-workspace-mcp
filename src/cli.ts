@@ -16,6 +16,7 @@ import path from "node:path";
 import { openDatabase, reapStaleState } from "./database/db.js";
 import { loadConfig } from "./config/env.js";
 import { mintToken, revokeToken } from "./security/authenticate.js";
+import { listSeats, provisionSeat, rotateSeatToken } from "./core/seats.js";
 
 const PROJECT_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const ENV_PATH = path.join(PROJECT_ROOT, ".env");
@@ -186,6 +187,61 @@ try {
         console.log(`${row.archived_at ? "[archived] " : ""}${row.slug} — ${row.name} (${row.type}, git: ${row.git_enabled ? "on" : "off"})\n    ${row.root_path}`);
       }
       if (rows.length === 0) console.log("no workspaces yet — create one with the workspace_create MCP tool");
+      db.close();
+      break;
+    }
+
+    case "provision-seat": {
+      const { values } = parseArgs({
+        args: process.argv.slice(3),
+        options: {
+          seat: { type: "string", default: "" },
+          name: { type: "string" },
+          slug: { type: "string" },
+        },
+      });
+      if (!values.seat) throw new Error("usage: provision-seat --seat <name> [--name <workspace name>] [--slug <workspace slug>]");
+      const { config, db } = freshDb();
+      const seat = await provisionSeat(db, config, {
+        seat: values.seat,
+        workspaceName: values.name,
+        workspaceSlug: values.slug,
+      });
+      // eslint-disable-next-line no-console
+      console.log(`✔ seat '${seat.seat}' provisioned`);
+      // eslint-disable-next-line no-console
+      console.log(`  user       : seat:${seat.seat}`);
+      // eslint-disable-next-line no-console
+      console.log(`  agent      : ${seat.agentName}`);
+      // eslint-disable-next-line no-console
+      console.log(`  workspace  : ${seat.workspaceSlug}  (isolated — this token sees only this one)`);
+      printTokenOnce(`TOKEN FOR SEAT '${seat.seat}'`, seat.token);
+      db.close();
+      break;
+    }
+
+    case "list-seats": {
+      const { db } = freshDb();
+      const rows = listSeats(db);
+      if (rows.length === 0) console.log("no seats yet — provision one: npm run provision-seat -- --seat alpha");
+      for (const r of rows) {
+        // eslint-disable-next-line no-console
+        console.log(`${r.seat.padEnd(14)} agent=${String(r.agent).padEnd(16)} workspace=${String(r.workspace).padEnd(18)} tokens=${r.tokens} events=${r.events}`);
+      }
+      db.close();
+      break;
+    }
+
+    case "rotate-seat": {
+      const seat = process.argv[3];
+      if (!seat) throw new Error("usage: rotate-seat <seat>");
+      const { config, db } = freshDb();
+      const result = rotateSeatToken(db, config, seat);
+      // eslint-disable-next-line no-console
+      console.log(`✔ old tokens for '${seat}' revoked`);
+      // eslint-disable-next-line no-console
+      console.log(`  workspace: ${result.workspaceSlug ?? "-"}`);
+      printTokenOnce(`NEW TOKEN FOR SEAT '${seat}'`, result.token);
       db.close();
       break;
     }

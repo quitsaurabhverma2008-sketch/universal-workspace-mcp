@@ -20,7 +20,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "demo:live": "tsx scripts/live-demo.ts"
+    "demo:live": "tsx scripts/live-demo.ts",
+    "provision-seat": "tsx src/cli.ts provision-seat",
+    "list-seats": "tsx src/cli.ts list-seats",
+    "rotate-seat": "tsx src/cli.ts rotate-seat"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",

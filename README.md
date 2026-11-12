@@ -14,6 +14,36 @@ A remote, persistent, multi-agent **coding workspace** exposed through the stand
 
 Live audit feed of a real build: who claimed which task, who wrote which file, when.
 
+## 11. Seats — separate tokens + separate workspaces (real isolation)
+
+A **seat** is a self-contained bundle: its own user row, its own agent identity, its own workspace on disk, and its own token. Because each seat has a distinct user, its token can only ever reach the workspaces that user belongs to — isolation is enforced by the authorization layer, not by convention.
+
+```bash
+npm run provision-seat -- --seat alpha --name "Alpha private space" --slug alpha-space
+npm run list-seats
+npm run rotate-seat -- alpha          # revoke old token, mint a new one
+```
+
+Each seat gets (automatically): `users` row `seat:<name>` → `agents` row `agent-<name>` → `workspaces` row `<slug>` (owner membership) → one bearer token. The workspace is seeded with `Brain.md`, `PROJECT.md`, `PLAN.md`, `outputs/`, `logs/` and a git repo.
+
+**Guarantee, verified by a test script:**
+
+```bash
+npx tsx scripts/verify-isolation.ts alpha=umcp_... beta=umcp_... gamma=umcp_...
+```
+```
+  PASS  alpha      → alpha-space  allowed      (own)
+  PASS  alpha      → beta-space   denied (FORBIDDEN)
+  PASS  alpha      → gamma-space  denied (FORBIDDEN)
+  alpha workspace_list → [alpha-space]
+  …
+✔ isolation verified — every seat sees only its own workspace
+```
+
+The same rule applies to the 3D UI: `/ui/api/state?workspace=…` returns `404 you are not a member of this workspace` for a foreign workspace.
+
+Handing a seat to someone = giving them that seat's token + workspace slug. They get a full MCP client that cannot see, read or touch any other seat's work.
+
 ---
 
 ## 0. Status
